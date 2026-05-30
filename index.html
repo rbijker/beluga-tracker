@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>BELUGA — IJsland 2026</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0d1f12">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BELUGA">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" href="icon-192.png" type="image/png">
+  <!-- Verwijder SW en caches meteen bij laden, vóór alles -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        regs.forEach(function(r) { r.unregister(); });
+      });
+      caches.keys().then(function(keys) {
+        keys.forEach(function(k) { caches.delete(k); });
+      });
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <style>
+    :root {
+      --bg0:#070f08; --bg1:#0d1f12; --bg2:#152a1a; --bg3:#1c3522;
+      --green:#3ddc6a; --green2:#1a7a35; --orange:#f5930a; --blue:#2196f3;
+      --white:#e8f5e9; --muted:#6b9e7a; --dim:#2e4d38;
+      --cb: rgba(61,220,106,0.12);
+      --safe-top: env(safe-area-inset-top, 0px);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;background:var(--bg0);color:var(--white);min-height:100dvh;overflow-x:hidden}
+
+    /* HEADER */
+    .header{background:linear-gradient(160deg,#0d1f12,#0b1e20);border-bottom:1px solid var(--cb);padding:calc(var(--safe-top) + 12px) 16px 0;position:sticky;top:0;z-index:500}
+    .header-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+    .brand{display:flex;align-items:center;gap:10px}
+    .brand-icon{font-size:30px;filter:drop-shadow(0 0 10px rgba(61,220,106,.5))}
+    .brand-name{font-size:20px;font-weight:800;letter-spacing:2px}
+    .brand-sub{font-size:10px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-top:1px}
+    .status-chip{display:flex;align-items:center;gap:5px;background:rgba(61,220,106,.1);border:1px solid rgba(61,220,106,.25);border-radius:20px;padding:5px 11px;font-size:11px;font-weight:600;color:var(--green)}
+    .pulse-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+
+    /* TABS */
+    .tabs{display:flex;overflow-x:auto;scrollbar-width:none;gap:2px}
+    .tabs::-webkit-scrollbar{display:none}
+    .tab-btn{flex-shrink:0;padding:9px 16px 11px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;transition:all .2s}
+    .tab-btn.active{color:var(--green);border-bottom-color:var(--green)}
+
+    /* PAGES */
+    .page{display:none}.page.active{display:block}
+    .content{max-width:720px;margin:0 auto;padding:16px}
+
+    /* CARD */
+    .card{background:var(--bg2);border:1px solid var(--cb);border-radius:14px;padding:16px;margin-bottom:14px}
+    .card-label{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:12px}
+
+    /* VOYAGE PROGRESS */
+    .voyage-progress{background:linear-gradient(135deg,var(--bg2),#122a1f);border:1px solid rgba(245,147,10,.2);border-radius:14px;padding:16px;margin-bottom:14px}
+    .voyage-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .voyage-title{font-size:13px;font-weight:600}
+    .voyage-pct{font-size:20px;font-weight:800;color:var(--orange)}
+    .prog-bar{height:5px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;margin-bottom:8px}
+    .prog-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--green2),var(--orange));transition:width .8s ease}
+    .voyage-ends{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+
+    /* MAP */
+    .map-wrap{border-radius:14px;overflow:hidden;height:320px;border:1px solid var(--cb);margin-bottom:14px;position:relative}
+    #map{height:100%;width:100%}
+    .map-overlay{position:absolute;top:8px;right:8px;z-index:400;display:flex;flex-direction:column;gap:6px}
+    .map-btn{background:rgba(13,31,18,.85);border:1px solid var(--cb);color:var(--green);border-radius:8px;padding:6px 10px;font-size:11px;cursor:pointer;backdrop-filter:blur(8px)}
+
+    /* STATS */
+    .stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+    .stat-card{background:var(--bg2);border:1px solid var(--cb);border-radius:12px;padding:14px;text-align:center}
+    .stat-val{font-size:26px;font-weight:800;color:var(--green);line-height:1}
+    .stat-val.orange{color:var(--orange)}.stat-val.blue{color:var(--blue)}
+    .stat-unit{font-size:13px;font-weight:400;color:var(--muted);margin-left:2px}
+    .stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+
+    /* BLOG */
+    .blog-card{background:var(--bg2);border:1px solid var(--cb);border-radius:14px;padding:16px;margin-bottom:12px;text-decoration:none;display:block;color:inherit;transition:border-color .2s}
+    .blog-card:hover{border-color:rgba(61,220,106,.3)}
+    .blog-meta{font-size:11px;color:var(--muted);margin-bottom:6px}
+    .blog-title{font-size:16px;font-weight:700;margin-bottom:8px;line-height:1.3}
+    .blog-excerpt{font-size:13px;color:var(--muted);line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+    .blog-img{width:100%;height:160px;object-fit:cover;border-radius:10px;margin-top:12px}
+    .post-detail-body img{width:100%!important;height:auto!important;max-width:100%;border-radius:10px;margin:12px 0;display:block;object-fit:contain}
+    .blog-actions{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+    .section-title{font-size:14px;font-weight:600}
+    .refresh-btn{background:none;border:1px solid rgba(61,220,106,.25);color:var(--green);border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer}
+
+    /* POST DETAIL */
+    .post-detail{display:none}
+    .post-detail.active{display:block}
+    .back-btn{display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid var(--cb);color:var(--green);border-radius:10px;padding:8px 14px;font-size:13px;cursor:pointer;margin-bottom:16px}
+    .post-detail-title{font-size:20px;font-weight:800;line-height:1.3;margin-bottom:8px}
+    .post-detail-meta{font-size:12px;color:var(--muted);margin-bottom:20px}
+    .post-detail-body{font-size:15px;line-height:1.7;color:#c8e6c9}
+    .post-detail-body img{width:100%;border-radius:10px;margin:12px 0;display:block}
+    .post-detail-body p{margin-bottom:14px}
+    .post-detail-body h1,.post-detail-body h2,.post-detail-body h3{color:var(--white);margin:20px 0 10px;font-size:17px}
+    .post-detail-body a{color:var(--blue);text-decoration:none}
+    .post-detail-body figure{margin:12px 0}
+    .post-detail-body figcaption{font-size:12px;color:var(--muted);margin-top:4px;font-style:italic}
+    .post-detail-body ul,.post-detail-body ol{padding-left:20px;margin-bottom:14px}
+    .post-detail-body iframe{display:none}
+
+    /* WEATHER */
+    .weather-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:10px}
+    .w-card{background:rgba(12,30,18,.8);border:1px solid var(--cb);border-radius:12px;padding:16px;text-align:center}
+    .w-icon{font-size:28px;margin-bottom:6px}
+    .w-val{font-size:22px;font-weight:700}
+    .w-lbl{font-size:11px;color:var(--muted);margin-top:3px}
+
+    /* LINKS */
+    .ext-btn{display:flex;align-items:center;gap:8px;color:var(--blue);font-size:13px;text-decoration:none;border:1px solid rgba(33,150,243,.2);border-radius:10px;padding:10px 14px;margin-bottom:8px}
+    .ext-btn-text{flex:1}
+    .ext-btn-arrow{color:var(--muted);font-size:16px}
+
+    /* WAYPOINTS */
+    .waypoint-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;background:rgba(12,30,18,.6);margin-bottom:6px}
+    .waypoint-row.done{opacity:.45}
+    .waypoint-row.current{background:rgba(61,220,106,.1);border:1px solid rgba(61,220,106,.25)}
+    .wp-dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex-shrink:0}
+    .waypoint-row.done .wp-dot{background:var(--green)}
+    .waypoint-row.current .wp-dot{background:var(--orange);box-shadow:0 0 8px var(--orange);animation:pulse 1.5s infinite}
+    .wp-name{flex:1;font-size:13px}
+    .wp-flag{font-size:16px}
+    .wp-nm{font-size:11px;color:var(--muted)}
+
+    /* CREW */
+    .crew-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    .crew-card{background:rgba(12,30,18,.8);border:1px solid var(--cb);border-radius:12px;padding:16px;text-align:center}
+    .crew-avatar{font-size:30px;margin-bottom:6px}
+    .crew-name{font-size:14px;font-weight:700}
+    .crew-role{font-size:11px;color:var(--muted);margin-top:2px}
+
+    /* CHIPS */
+    .chips{display:flex;flex-wrap:wrap;gap:6px}
+    .chip{background:rgba(61,220,106,.08);border:1px solid rgba(61,220,106,.2);border-radius:20px;padding:4px 12px;font-size:12px;color:var(--muted)}
+
+    /* COUNTDOWN */
+    .countdown-block{background:linear-gradient(135deg,#0d1f12,#0b1e20);border:1px solid rgba(245,147,10,.2);border-radius:14px;padding:20px 16px;margin-bottom:14px;text-align:center}
+    .cd-main{font-size:52px;font-weight:900;color:var(--orange);line-height:1}
+    .cd-label{font-size:13px;color:var(--muted);margin-top:6px}
+    .cd-sub{font-size:11px;color:var(--dim);margin-top:4px}
+    .cd-timer{display:flex;justify-content:center;gap:12px;margin-top:14px}
+    .cd-unit{text-align:center}
+    .cd-unit-val{font-size:32px;font-weight:800;color:var(--orange);line-height:1;min-width:48px;background:rgba(245,147,10,.1);border:1px solid rgba(245,147,10,.2);border-radius:10px;padding:8px 10px;display:block}
+    .cd-unit-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+
+    /* LOADING */
+    .loading-state{text-align:center;padding:40px 20px;color:var(--muted)}
+    .spinner{width:32px;height:32px;border:2px solid rgba(61,220,106,.2);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    @media(min-width:600px){
+      .stats-grid,.weather-grid{grid-template-columns:repeat(4,1fr)}
+      .crew-grid{grid-template-columns:repeat(2,1fr)}
+      .map-wrap{height:420px}
+    }
+
+    /* ── DBR / Apple Health ────────────────────────── */
+    #page-dbr{background:#f2f2f7}
+    .dbr-wrap{max-width:720px;margin:0 auto;padding:16px 16px 48px}
+    .ah-section-lbl{font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:#8e8e93;margin:20px 0 8px 4px}
+    .ah-card{background:#fff;border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 6px rgba(0,0,0,.07)}
+    .ah-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid #f2f2f7}
+    .ah-row:last-child{border-bottom:none;padding-bottom:0}
+    .ah-row-lbl{font-size:15px;color:#1c1c1e}
+    .ah-row-val{font-size:15px;font-weight:600;color:#1c1c1e}
+    .kpi-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+    .kpi-tile{background:#fff;border-radius:16px;padding:16px 14px;box-shadow:0 1px 6px rgba(0,0,0,.07)}
+    .kpi-num{font-size:30px;font-weight:800;line-height:1;color:#1c1c1e}
+    .kpi-u{font-size:14px;font-weight:400;color:#8e8e93}
+    .kpi-lbl2{font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-top:6px}
+    .kpi-ico{font-size:18px;margin-bottom:6px}
+    .rings-row{display:flex;justify-content:space-around;padding:8px 0 4px}
+    .ring-wrap{display:flex;flex-direction:column;align-items:center;gap:6px}
+    .ring-lbl-txt{font-size:10px;color:#8e8e93;text-align:center;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+    .ah-prog-track{height:8px;background:#e5e5ea;border-radius:4px;overflow:hidden;margin:6px 0}
+    .ah-prog-fill{height:100%;border-radius:4px;transition:width 1.2s ease}
+    .lti-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700}
+    .lti-ok{background:#e8f8ed;color:#1d8348}
+    .lti-warn{background:#fde8e7;color:#c0392b}
+    .ah-trend{font-size:11px;font-weight:600;margin-top:4px}
+    .t-up{color:#34c759}.t-dn{color:#ff3b30}.t-flat{color:#8e8e93}
+    @media(min-width:600px){.kpi-grid2{grid-template-columns:repeat(4,1fr)}}
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-row">
+    <div class="brand">
+      <img src="logo.png" style="height:44px;width:auto;border-radius:10px" alt="BELUGA">
+      <div>
+        <div class="brand-name">BELUGA</div>
+        <div class="brand-sub">IJsland Expeditie 2026</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button onclick="hardRefresh()" title="Cache leegmaken en herladen" style="background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:4px;line-height:1">&#x21BB;</button>
+      <div class="status-chip">
+        <div class="pulse-dot"></div>
+        <span id="header-status">LIVE</span>
+      </div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" data-page="kaart">&#x1F5FA; Kaart</button>
+    <button class="tab-btn" data-page="live">&#x1F4E1; Live</button>
+    <button class="tab-btn" data-page="dagboek">&#x1F4D6; Dagboek</button>
+    <button class="tab-btn" data-page="weer">&#x1F30A; Weer</button>
+    <button class="tab-btn" data-page="logboek">&#x1F9ED; Logboek</button>
+    <button class="tab-btn" data-page="dbr">&#x1F4CA; DBR</button>
+  </div>
+</div>
+
+<!-- KAART -->
+<div class="page active" id="page-kaart">
+  <div class="content">
+    <div class="voyage-progress">
+      <div class="voyage-header">
+        <span class="voyage-title">Route voortgang</span>
+        <span class="voyage-pct" id="pct-text">--%</span>
+      </div>
+      <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+      <div class="voyage-ends">
+        <span>&#x1F1F3;&#x1F1F1; Enkhuizen</span>
+        <span id="nm-label" style="color:var(--dim);font-size:11px">~4.300 nm</span>
+        <span>&#x1F1F3;&#x1F1F1; Enkhuizen</span>
+      </div>
+      <div style="text-align:center;margin-top:4px;font-size:11px;color:var(--muted)"><span id="voyage-phase">Heenreis</span> &mdash; halfweg: &#x1F1EE;&#x1F1F8; Reykjavik</div>
+    </div>
+
+    <div class="map-wrap">
+      <div id="map" style="height:320px;width:100%"></div>
+      <div class="map-overlay">
+        <button class="map-btn" onclick="flyToShip()">&#x1F4CD; Boot</button>
+        <button class="map-btn" onclick="flyToRoute()">&#x1F5FA; Route</button>
+      </div>
+    </div>
+
+    <div id="ais-status" style="font-size:11px;color:var(--muted);text-align:center;margin:-2px 0 12px;display:flex;align-items:center;justify-content:center;gap:6px">
+      <span id="ais-dot" style="width:7px;height:7px;border-radius:50%;background:var(--dim);display:inline-block"></span>
+      <span id="ais-status-text">AIS verbinden…</span>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-val" id="s-speed">--<span class="stat-unit">kn</span></div><div class="stat-lbl">Snelheid</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-cog">--<span class="stat-unit">&#xB0;</span></div><div class="stat-lbl">Koers</div></div>
+      <div class="stat-card"><div class="stat-val orange" id="s-sailed">--<span class="stat-unit">nm</span></div><div class="stat-lbl">Gevaren</div></div>
+      <div class="stat-card"><div class="stat-val blue" id="s-remain">--<span class="stat-unit">nm</span></div><div class="stat-lbl">Nog te gaan</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Live AIS trackers</div>
+      <a href="https://www.marinetraffic.com/en/ais/details/ships/shipid:5494840" target="_blank" class="ext-btn">
+        <span>&#x1F6F0;</span><span class="ext-btn-text">MarineTraffic &mdash; BELUGA live</span><span class="ext-btn-arrow">&#x203A;</span>
+      </a>
+      <a href="https://www.vesselfinder.com/?mmsi=244150489" target="_blank" class="ext-btn">
+        <span>&#x1F4E1;</span><span class="ext-btn-text">VesselFinder &mdash; MMSI 244150489</span><span class="ext-btn-arrow">&#x203A;</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- LIVE -->
+<div class="page" id="page-live">
+  <div class="content">
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:16px 16px 0 16px"><div class="card-label">Live AIS-positie &middot; VesselFinder</div></div>
+      <div id="live-map" style="height:440px;width:100%;background:var(--bg1)">
+        <div class="loading-state"><div class="spinner"></div>Live kaart laden&#x2026;</div>
+      </div>
+    </div>
+    <a href="https://www.vesselfinder.com/vessels/details/244150489" target="_blank" class="ext-btn">
+      <span>&#x1F4E1;</span><span class="ext-btn-text">Volledige live-pagina op VesselFinder</span><span class="ext-btn-arrow">&#x203A;</span>
+    </a>
+    <a href="https://www.marinetraffic.com/en/ais/details/ships/shipid:5494840" target="_blank" class="ext-btn">
+      <span>&#x1F6F0;</span><span class="ext-btn-text">Alternatief: MarineTraffic</span><span class="ext-btn-arrow">&#x203A;</span>
+    </a>
+    <p style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.55">Live positie komt van terrestrische AIS (&plusmn;40 nm uit de kust). Op open zee kan de positie tijdelijk wegvallen tot het schip weer in bereik van een kuststation komt &mdash; gebruik dan de geschatte positie op het Kaart-tabblad.</p>
+  </div>
+</div>
+
+<!-- DAGBOEK -->
+<div class="page" id="page-dagboek">
+  <div class="content">
+    <div class="blog-actions">
+      <span class="section-title">Laatste berichten</span>
+      <button class="refresh-btn" onclick="loadBlog(true)">&#x21BB; Vernieuwen</button>
+    </div>
+    <div id="blog-list"><div class="loading-state"><div class="spinner"></div>Berichten laden&#x2026;</div></div>
+
+    <!-- IN-APP POST DETAIL -->
+    <div class="post-detail" id="post-detail">
+      <button class="back-btn" onclick="showBlogList()">&#x2190; Terug naar overzicht</button>
+      <div class="post-detail-title" id="post-detail-title"></div>
+      <div class="post-detail-meta" id="post-detail-meta"></div>
+      <div class="post-detail-body" id="post-detail-body"></div>
+      <button class="back-btn" onclick="showBlogList()" style="margin-top:24px">&#x2190; Terug naar overzicht</button>
+    </div>
+
+    <div id="blog-ext-link">
+      <a href="https://www.crevecoeur.nl" target="_blank" class="ext-btn" style="margin-top:8px">
+        <span>&#x1F4DD;</span><span class="ext-btn-text">Alle berichten op crevecoeur.nl</span><span class="ext-btn-arrow">&#x203A;</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- WEER -->
+<div class="page" id="page-weer">
+  <div class="content">
+    <div class="card">
+      <div class="card-label" id="weer-position-label">Weer op bootpositie</div>
+      <div id="weer-data"><div class="loading-state"><div class="spinner"></div>Weerdata ophalen&#x2026;</div></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Externe weerbronnen</div>
+      <a href="https://www.windy.com/?60,-10,5" target="_blank" class="ext-btn">
+        <span>&#x1F4A8;</span><span class="ext-btn-text">Windy &mdash; Windkaart route</span><span class="ext-btn-arrow">&#x203A;</span>
+      </a>
+      <a href="https://www.ziltmeteo.nl" target="_blank" class="ext-btn">
+        <span>&#x2693;</span><span class="ext-btn-text">Zilt Meteo &mdash; Zeilersweer</span><span class="ext-btn-arrow">&#x203A;</span>
+      </a>
+      <a href="https://www.yr.no/en/map/wind" target="_blank" class="ext-btn">
+        <span>&#x1F1F3;&#x1F1F4;</span><span class="ext-btn-text">Yr.no &mdash; Noorse weerdienst</span><span class="ext-btn-arrow">&#x203A;</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- LOGBOEK -->
+<div class="page" id="page-logboek">
+  <div class="content">
+    <div class="countdown-block" id="countdown-block">
+      <div class="cd-main" id="cd-number">--</div>
+      <div class="cd-label" id="cd-label">Laden&#x2026;</div>
+      <div class="cd-sub" id="cd-sub"></div>
+      <div class="cd-timer" id="cd-timer" style="display:none">
+        <div class="cd-unit"><span class="cd-unit-val" id="cd-days">--</span><div class="cd-unit-lbl">Dagen</div></div>
+        <div class="cd-unit"><span class="cd-unit-val" id="cd-hours">--</span><div class="cd-unit-lbl">Uren</div></div>
+        <div class="cd-unit"><span class="cd-unit-val" id="cd-mins">--</span><div class="cd-unit-lbl">Min</div></div>
+        <div class="cd-unit"><span class="cd-unit-val" id="cd-secs">--</span><div class="cd-unit-lbl">Sec</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Vaartuig</div>
+      <div class="chips">
+        <span class="chip">&#x26F5; BELUGA</span>
+        <span class="chip">&#x1F4D0; Bestevaer 49ST</span>
+        <span class="chip">&#x2693; Enkhuizen</span>
+        <span class="chip">&#x1F194; MMSI 244150489</span>
+        <span class="chip">&#x1F4E1; Starlink</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Bemanning</div>
+      <div class="crew-grid">
+        <div class="crew-card"><div class="crew-avatar">&#x1F9D1;&#x200D;&#x2708;&#xFE0F;</div><div class="crew-name">Roelof</div></div>
+        <div class="crew-card"><div class="crew-avatar">&#x1F469;&#x200D;&#x2708;&#xFE0F;</div><div class="crew-name">Aranka</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Geplande route</div>
+      <div id="waypoints-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Meer info</div>
+      <a href="https://www.crevecoeur.nl/cms/schip/beluga/" target="_blank" class="ext-btn">
+        <span>&#x26F5;</span><span class="ext-btn-text">Over de BELUGA</span><span class="ext-btn-arrow">&#x203A;</span>
+      </a>
+      <a href="https://kmyachtbuilders.com/fleet/bestevaer-49-beluga/" target="_blank" class="ext-btn">
+        <span>&#x1F3D7;</span><span class="ext-btn-text">KMY &mdash; Bestevaer 49 BELUGA</span><span class="ext-btn-arrow">&#x203A;</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- DBR -->
+<div class="page" id="page-dbr">
+  <div class="dbr-wrap">
+    <div id="dbr-body"><div class="loading-state" style="color:#8e8e93"><div class="spinner" style="border-color:rgba(0,0,0,.1);border-top-color:#007aff"></div>Data laden&#x2026;</div></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+var CFG = {
+  mmsi:       '244150489',
+  blogRss:    'https://www.crevecoeur.nl/cms/feed/',
+  wpApi:      'https://www.crevecoeur.nl/cms/wp-json/wp/v2/posts?per_page=20&_embed&after=2026-01-01T00:00:00',
+  corsProxies: [
+    'https://corsproxy.io/?',
+    'https://api.allorigins.win/raw?url=',
+    'https://api.codetabs.com/v1/proxy?quest='
+  ],
+  departureDate: new Date('2026-05-30T09:00:00'),
+  arrivalDate:   new Date('2026-08-30'),
+  homePort:    { lat: 52.700, lng: 5.291 },
+  destination: { lat: 64.128, lng: -21.932 },
+  totalNm:     4300,
+  avgNmPerDay: 145
+};
+
+var ROUTE = [
+  { lat: 52.700, lng:   5.291, name: 'Enkhuizen',    flag: 'NL', nm:    0 },
+  { lat: 52.964, lng:   4.757, name: 'Den Helder',   flag: 'NL', nm:   35 },
+  { lat: 55.500, lng:   2.500, name: 'Noordzee',     flag: '~',  nm:  260 },
+  { lat: 58.000, lng:  -1.000, name: 'N.-Schotland', flag: 'GB', nm:  560 },
+  { lat: 60.150, lng:  -1.150, name: 'Shetland',     flag: 'GB', nm:  700 },
+  { lat: 62.000, lng:  -6.800, name: 'Faeroer',      flag: 'FO', nm: 1020 },
+  { lat: 63.500, lng: -18.000, name: 'IJsland ZK',   flag: 'IS', nm: 1790 },
+  { lat: 64.128, lng: -21.932, name: 'Reykjavik',    flag: 'IS', nm: 2150 },
+  // Terugreis
+  { lat: 63.500, lng: -18.000, name: 'IJsland ZK',   flag: 'IS', nm: 2510, ret: true },
+  { lat: 62.000, lng:  -6.800, name: 'Faeroer',      flag: 'FO', nm: 3280, ret: true },
+  { lat: 60.150, lng:  -1.150, name: 'Shetland',     flag: 'GB', nm: 3600, ret: true },
+  { lat: 58.000, lng:  -1.000, name: 'N.-Schotland', flag: 'GB', nm: 3740, ret: true },
+  { lat: 55.500, lng:   2.500, name: 'Noordzee',     flag: '~',  nm: 4040, ret: true },
+  { lat: 52.964, lng:   4.757, name: 'Den Helder',   flag: 'NL', nm: 4265, ret: true },
+  { lat: 52.700, lng:   5.291, name: 'Enkhuizen',    flag: 'NL', nm: 4300, ret: true }
+];
+
+var map = null, shipMarker = null;
+var blogLoaded = false, weerLoaded = false;
+var postsData = [];
+var maxSpeedKn = null;
+var shipPos = { lat: CFG.homePort.lat, lng: CFG.homePort.lng, speed: null, cog: null };
+var dbrInterval = null;
+var activePage = 'kaart';
+
+/* ── TAB NAVIGATION ─────────────────────────────── */
+function showPage(id, btn) {
+  var pages = document.querySelectorAll('.page');
+  var btns  = document.querySelectorAll('.tab-btn');
+  for (var i = 0; i < pages.length; i++) pages[i].classList.remove('active');
+  for (var i = 0; i < btns.length;  i++) btns[i].classList.remove('active');
+  document.getElementById('page-' + id).classList.add('active');
+  btn.classList.add('active');
+  activePage = id;
+  if (id === 'kaart')   { setTimeout(function(){ if(map) map.invalidateSize(); }, 80); }
+  if (id === 'live')    { loadLive(); }
+  if (id === 'dagboek') { loadBlog(); }
+  if (id === 'weer')    { loadWeer(); }
+  if (id === 'logboek') { renderLogboek(); }
+  if (id === 'dbr')     { renderDBR(); startDbrRefresh(); }
+  else                  { stopDbrRefresh(); }
+}
+
+function startDbrRefresh() {
+  stopDbrRefresh();
+  // Elk uur opnieuw renderen zodat dagcijfers actueel blijven
+  dbrInterval = setInterval(function() { renderDBR(); }, 60 * 60 * 1000);
+}
+
+function stopDbrRefresh() {
+  if (dbrInterval) { clearInterval(dbrInterval); dbrInterval = null; }
+}
+
+/* ── MAP ────────────────────────────────────────── */
+function initMap() {
+  try {
+    var mapDiv = document.getElementById('map');
+    console.log('[MAP] div hoogte:', mapDiv ? mapDiv.offsetHeight : 'null');
+    map = L.map('map', { center: [60, -8], zoom: 4 });
+    console.log('[MAP] Leaflet map aangemaakt');
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles &copy; Esri &mdash; GEBCO, NOAA',
+      maxZoom: 13
+    }).addTo(map);
+    console.log('[MAP] tile layer toegevoegd');
+    setTimeout(function(){ if(map) map.invalidateSize(); }, 300);
+
+    var coords = ROUTE.map(function(w){ return [w.lat, w.lng]; });
+    L.polyline(coords, { color:'#3ddc6a', weight:2, opacity:.6, dashArray:'8 6' }).addTo(map);
+
+    ROUTE.forEach(function(wp, i) {
+      var isReykjavik = wp.nm === 2150;
+      var isStart = i === 0;
+      var isEnd   = i === ROUTE.length - 1;
+      var size    = (isStart || isReykjavik || isEnd) ? 13 : 7;
+      var col     = isReykjavik ? '#f5930a' : ((isStart || isEnd) ? '#3ddc6a' : '#2196f3');
+      var icon = L.divIcon({
+        html: '<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:'+col+';border:2px solid rgba(255,255,255,.8);box-shadow:0 0 8px '+col+'88"></div>',
+        className:'', iconSize:[size,size], iconAnchor:[size/2,size/2]
+      });
+      L.marker([wp.lat, wp.lng], { icon: icon }).addTo(map)
+        .bindPopup('<b>' + wp.name + '</b><br><span style="color:#888">' + wp.nm + ' nm</span>');
+    });
+
+    updateShipMarker();
+  } catch(e) { console.error('[MAP] FOUT:', e.message, e.stack); }
+}
+
+function updateShipMarker() {
+  if (!map) return;
+  if (shipMarker) map.removeLayer(shipMarker);
+  var icon = L.divIcon({
+    html: '<div style="font-size:26px;filter:drop-shadow(0 0 8px rgba(61,220,106,.9))">&#x26F5;</div>',
+    className:'', iconSize:[30,30], iconAnchor:[15,15]
+  });
+  shipMarker = L.marker([shipPos.lat, shipPos.lng], { icon: icon })
+    .addTo(map).bindPopup('<b>BELUGA</b><br><span style="color:#888">geschatte positie</span>');
+  updateStatsDisplay();
+}
+
+function flyToShip() { if(map) map.flyTo([shipPos.lat, shipPos.lng], 7, { animate:true, duration:1.2 }); }
+function flyToRoute() { if(map) map.flyToBounds([[52.7,5.3],[64.1,-21.9]], { padding:[24,24] }); }
+
+/* ── TRIP PROGRESS ──────────────────────────────── */
+function getTripProgress() {
+  var now = new Date();
+  if (!hasDeparted()) return { nmSailed: 0, phase: 'pre' };
+  // LIVE override: bereken voortgang uit echte AIS-positie indien recent
+  var _ln = (typeof liveNmSailed === 'function') ? liveNmSailed() : null;
+  if (_ln != null) {
+    var _mid = CFG.totalNm / 2;
+    var _phase = _ln >= CFG.totalNm - 5 ? 'home' : (_ln > _mid + 5 ? 'ret' : 'out');
+    return { nmSailed: _ln, phase: _phase, live: true };
+  }
+  var outNm = CFG.totalNm / 2; // 2150
+  var sailDays = outNm / CFG.avgNmPerDay; // ~14.8 days
+  var totalDays = (CFG.arrivalDate - getDeparture()) / 86400000;
+  var icelandDays = Math.max(0, totalDays - 2 * sailDays);
+  var outboundEnd = new Date(getDeparture().getTime() + sailDays * 86400000);
+  var returnStart = new Date(outboundEnd.getTime() + icelandDays * 86400000);
+  if (now <= outboundEnd) {
+    return { nmSailed: Math.min((now - getDeparture()) / 86400000 * CFG.avgNmPerDay, outNm), phase: 'out' };
+  } else if (now < returnStart) {
+    return { nmSailed: outNm, phase: 'iceland' };
+  } else if (now <= CFG.arrivalDate) {
+    var nm = Math.min((now - returnStart) / 86400000 * CFG.avgNmPerDay, outNm);
+    return { nmSailed: outNm + nm, phase: 'ret' };
+  }
+  return { nmSailed: CFG.totalNm, phase: 'home' };
+}
+
+/* ── STATS ──────────────────────────────────────── */
+function updateStatsDisplay() {
+  var prog = getTripProgress();
+  var nmSailed = prog.nmSailed;
+  var pct    = Math.min(100, (nmSailed / CFG.totalNm) * 100);
+  var remain = Math.max(0, CFG.totalNm - nmSailed);
+
+  var phaseEl = document.getElementById('voyage-phase');
+  if (phaseEl) phaseEl.textContent = (prog.phase === 'ret' || prog.phase === 'home') ? 'Terugreis' : 'Heenreis';
+
+  document.getElementById('pct-text').textContent  = Math.round(pct) + '%';
+  document.getElementById('prog-fill').style.width = pct + '%';
+  document.getElementById('nm-label').textContent  = Math.round(nmSailed) + ' nm gevaren';
+  document.getElementById('s-sailed').innerHTML    = Math.round(nmSailed) + '<span class="stat-unit">nm</span>';
+  document.getElementById('s-remain').innerHTML    = Math.round(remain)   + '<span class="stat-unit">nm</span>';
+  var _liveOk = (typeof isLiveFresh === 'function') && isLiveFresh();
+  document.getElementById('s-speed').innerHTML     = (_liveOk && shipPos.speed != null) ? shipPos.speed + '<span class="stat-unit">kn</span>' : '--<span class="stat-unit">kn</span>';
+  document.getElementById('s-cog').innerHTML       = (_liveOk && shipPos.cog   != null) ? shipPos.cog   + '<span class="stat-unit">&#xB0;</span>'  : '--<span class="stat-unit">&#xB0;</span>';
+}
+
+/* ── BLOG ────────────────────────────────────────── */
+function loadBlog(force) {
+  if (blogLoaded && !force) return;
+  var container = document.getElementById('blog-list');
+  container.innerHTML = '<div class="loading-state"><div class="spinner"></div>Berichten laden…</div>';
+  postsData = [];
+  var wp = CFG.wpApi, rss = CFG.blogRss;
+  // Altijd via een CORS-proxy (voorkomt console-errors); WP REST eerst, RSS als fallback
+  var attempts = [
+    { url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(wp),  kind: 'wp'  },
+    { url: 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(wp), kind: 'wp' },
+    { url: 'https://corsproxy.io/?url=' + encodeURIComponent(wp),  kind: 'wp'  },
+    { url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(rss), kind: 'rss' },
+    { url: 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(rss), kind: 'rss' }
+  ];
+  tryBlogAttempt(attempts, 0, container);
+}
+
+function tryBlogAttempt(attempts, i, container) {
+  if (i >= attempts.length) {
+    container.innerHTML = '<div class="card" style="color:var(--muted);font-size:13px">Berichten tijdelijk niet beschikbaar.</div>';
+    return;
+  }
+  fetch(attempts[i].url)
+    .then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
+    .then(function(text){
+      var posts = (attempts[i].kind === 'wp') ? parseWpPosts(text) : parseRssPosts(text);
+      if (!posts || !posts.length) throw new Error('leeg');
+      postsData = posts;
+      container.innerHTML = postsData.map(renderPostCard).join('');
+      blogLoaded = true;
+    })
+    .catch(function(){ tryBlogAttempt(attempts, i + 1, container); });
+}
+
+function parseWpPosts(text) {
+  var posts = JSON.parse(text);
+  if (!posts || !posts.length) return [];
+  return posts.map(function(p){
+    var title   = (p.title && p.title.rendered) ? p.title.rendered : '';
+    var date    = p.date ? new Date(p.date).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'}) : '';
+    var excerpt = (p.excerpt && p.excerpt.rendered) ? p.excerpt.rendered.replace(/<[^>]+>/g,'').trim().substring(0,220) : '';
+    var content = (p.content && p.content.rendered) ? p.content.rendered : '';
+    var img     = (p._embedded && p._embedded['wp:featuredmedia'] && p._embedded['wp:featuredmedia'][0]) ? p._embedded['wp:featuredmedia'][0].source_url : null;
+    return { title:title, date:date, excerpt:excerpt, content:content, img:img, link:p.link||'#' };
+  });
+}
+
+function parseRssPosts(text) {
+  var ns    = 'http://purl.org/rss/1.0/modules/content/';
+  var xml   = new DOMParser().parseFromString(text, 'text/xml');
+  var items = xml.querySelectorAll('item');
+  if (!items.length) return [];
+  var out = [];
+  for (var i = 0; i < Math.min(items.length, 12); i++) {
+    var item    = items[i];
+    var titleEl = item.querySelector('title');
+    var title   = titleEl ? titleEl.textContent : '';
+    var linkEl  = item.querySelector('link');
+    var link    = (linkEl && linkEl.nextSibling && linkEl.nextSibling.nodeValue) ? linkEl.nextSibling.nodeValue.trim() : (linkEl ? linkEl.textContent : '#');
+    var dateEl  = item.querySelector('pubDate');
+    var rawDate = dateEl ? dateEl.textContent : '';
+    var encEl   = item.getElementsByTagNameNS(ns,'encoded')[0];
+    var descEl  = item.querySelector('description');
+    var content = encEl ? encEl.textContent : (descEl ? descEl.textContent : '');
+    var tmp     = document.createElement('div'); tmp.innerHTML = content;
+    var excerpt = tmp.textContent ? tmp.textContent.trim().substring(0,220) : '';
+    var imgMatch = content.match(/src="([^"]+?\.(?:jpe?g|png|webp)[^"]*?)"/i);
+    var img     = imgMatch ? imgMatch[1].replace(/&amp;/g,'&') : null;
+    var date    = rawDate ? new Date(rawDate).toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'}) : '';
+    var postYear = rawDate ? new Date(rawDate).getFullYear() : 0;
+    if (postYear >= 2026) {
+      out.push({ title:title, date:date, excerpt:excerpt, content:content, img:img, link:link });
+    }
+  }
+  return out;
+}
+
+function renderPostCard(p, i) {
+  return '<div class="blog-card" onclick="showPost('+i+')" style="cursor:pointer">'
+    + '<div class="blog-meta">'+p.date+'</div>'
+    + '<div class="blog-title">'+p.title+'</div>'
+    + (p.excerpt ? '<div class="blog-excerpt">'+p.excerpt+'&#x2026;</div>' : '')
+    + (p.img     ? '<img src="'+p.img+'" class="blog-img" loading="lazy" onerror="this.remove()">' : '')
+    + '</div>';
+}
+
+function showPost(index) {
+  var p = postsData[index];
+  if (!p) return;
+  document.getElementById('post-detail-title').innerHTML = p.title;
+  document.getElementById('post-detail-meta').textContent = p.date;
+  document.getElementById('post-detail-body').innerHTML = p.content || '<p style="color:var(--muted)">Geen inhoud beschikbaar.</p>';
+  document.getElementById('blog-list').style.display = 'none';
+  document.getElementById('blog-ext-link').style.display = 'none';
+  document.querySelector('.blog-actions').style.display = 'none';
+  var detail = document.getElementById('post-detail');
+  detail.classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function showBlogList() {
+  document.getElementById('post-detail').classList.remove('active');
+  document.getElementById('blog-list').style.display = '';
+  document.getElementById('blog-ext-link').style.display = '';
+  document.querySelector('.blog-actions').style.display = '';
+}
+
+/* ── WEATHER ─────────────────────────────────────── */
+function degToCompass(d) {
+  var dirs = ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'];
+  return dirs[Math.round(d/22.5)%16];
+}
+function windToBft(kn) {
+  if(kn<1) return 0; if(kn<4) return 1; if(kn<7) return 2; if(kn<11) return 3;
+  if(kn<17) return 4; if(kn<22) return 5; if(kn<28) return 6; if(kn<34) return 7;
+  if(kn<41) return 8; if(kn<48) return 9; if(kn<56) return 10; if(kn<64) return 11;
+  return 12;
+}
+
+function loadWeer() {
+  if (weerLoaded) return;
+  var lat = shipPos.lat, lng = shipPos.lng;
+  document.getElementById('weer-position-label').textContent =
+    'Weer op positie ' + lat.toFixed(2) + '°N, ' + Math.abs(lng).toFixed(2) + '°' + (lng < 0 ? 'W' : 'E');
+
+  var atmosUrl  = 'https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lng+'&current=temperature_2m,wind_speed_10m,wind_direction_10m&wind_speed_unit=kn&timezone=auto';
+  var marineUrl = 'https://marine-api.open-meteo.com/v1/marine?latitude='+lat+'&longitude='+lng+'&current=wave_height,wave_period,swell_wave_height';
+
+  Promise.all([fetch(atmosUrl), fetch(marineUrl)])
+    .then(function(responses){ return Promise.all([responses[0].json(), responses[1].json()]); })
+    .then(function(data){
+      var atm = data[0], mar = data[1];
+      var wind  = atm.current && atm.current.wind_speed_10m    != null ? atm.current.wind_speed_10m.toFixed(1)    : '--';
+      var wdir  = atm.current && atm.current.wind_direction_10m != null ? atm.current.wind_direction_10m           : 0;
+      var temp  = atm.current && atm.current.temperature_2m    != null ? atm.current.temperature_2m.toFixed(0)    : '--';
+      var wave  = mar.current && mar.current.wave_height        != null ? mar.current.wave_height.toFixed(1)       : '--';
+      var wper  = mar.current && mar.current.wave_period        != null ? mar.current.wave_period.toFixed(0)       : '--';
+      var swel  = mar.current && mar.current.swell_wave_height  != null ? mar.current.swell_wave_height.toFixed(1) : '--';
+      var bft   = windToBft(parseFloat(wind) || 0);
+
+      document.getElementById('weer-data').innerHTML =
+        '<div class="weather-grid">'
+        + '<div class="w-card"><div class="w-icon">&#x1F4A8;</div><div class="w-val">'+wind+' kn</div><div class="w-lbl">Wind '+degToCompass(wdir)+' &middot; Bft '+bft+'</div></div>'
+        + '<div class="w-card"><div class="w-icon">&#x1F30A;</div><div class="w-val">'+wave+' m</div><div class="w-lbl">Golfhoogte</div></div>'
+        + '<div class="w-card"><div class="w-icon">&#x1F321;&#xFE0F;</div><div class="w-val">'+temp+'&deg;C</div><div class="w-lbl">Temperatuur</div></div>'
+        + '<div class="w-card"><div class="w-icon">&#x23F1;</div><div class="w-val">'+wper+'s</div><div class="w-lbl">Periode &middot; '+swel+'m deinings</div></div>'
+        + '</div>'
+        + '<p style="font-size:11px;color:var(--muted);margin-top:8px">Bron: Open-Meteo &middot; '+ new Date().toLocaleTimeString('nl-NL')+'</p>';
+      weerLoaded = true;
+    })
+    .catch(function(){
+      document.getElementById('weer-data').innerHTML = '<p style="color:var(--muted);font-size:13px">Weerdata niet beschikbaar.</p>';
+    });
+}
+
+/* ── LIVE (VesselFinder embed) ──────────── */
+var liveLoaded = false;
+function loadLive() {
+  if (liveLoaded) return;
+  liveLoaded = true;
+  var box = document.getElementById('live-map');
+  if (!box) return;
+  var src = 'https://www.vesselfinder.com/aismap?zoom=6&mmsi=' + CFG.mmsi
+          + '&names=true&show_track=true&width=100%25&height=100%25&store_pos=true';
+  var iframe = document.createElement('iframe');
+  iframe.title = 'VesselFinder live kaart';
+  iframe.src = src;
+  iframe.setAttribute('width', '100%');
+  iframe.setAttribute('height', '100%');
+  iframe.style.cssText = 'border:0;display:block;width:100%;height:100%';
+  // Val terug op een directe link als het frame niet laadt (X-Frame-block)
+  var fb = setTimeout(function(){
+    box.innerHTML = '<div class="loading-state" style="padding:32px 20px">'
+      + 'Live kaart kon niet in de app laden.<br><br>'
+      + '<a href="https://www.vesselfinder.com/vessels/details/' + CFG.mmsi + '" target="_blank" '
+      + 'style="color:var(--green);text-decoration:underline">Open de live positie op VesselFinder &#x203A;</a></div>';
+  }, 8000);
+  iframe.addEventListener('load', function(){ clearTimeout(fb); });
+  box.innerHTML = '';
+  box.appendChild(iframe);
+}
+
+/* ── LOGBOEK ─────────────────────────────────────── */
+function renderLogboek() {
+  renderCountdown();
+  renderWaypoints();
+}
+
+var countdownInterval = null;
+
+function renderCountdown() {
+  function pad(n){ return n < 10 ? '0'+n : ''+n; }
+
+  function tick() {
+    var now  = new Date();
+    var cdNum   = document.getElementById('cd-number');
+    var cdLabel = document.getElementById('cd-label');
+    var cdSub   = document.getElementById('cd-sub');
+    var cdTimer = document.getElementById('cd-timer');
+    var cdBlock = document.getElementById('countdown-block');
+    if (!cdNum) return;
+
+    if (!hasDeparted()) {
+      // Nog niet vertrokken uit Enkhuizen
+      if (now < PLANNED_DEP) {
+        // Aftellen tot gepland vertrek
+        var diff = PLANNED_DEP - now;
+        cdNum.textContent   = '';
+        cdNum.style.color   = 'var(--orange)';
+        cdLabel.textContent = 'Tot gepland vertrek';
+        cdSub.textContent   = 'Gepland: zaterdag 30 mei 2026 om 09:00';
+        cdTimer.style.display = 'flex';
+        cdBlock.style.borderColor = 'rgba(245,147,10,.2)';
+        document.getElementById('cd-days').textContent  = Math.floor(diff / 86400000);
+        document.getElementById('cd-hours').textContent = pad(Math.floor((diff % 86400000) / 3600000));
+        document.getElementById('cd-mins').textContent  = pad(Math.floor((diff % 3600000) / 60000));
+        document.getElementById('cd-secs').textContent  = pad(Math.floor((diff % 60000) / 1000));
+      } else {
+        // Gepland tijdstip verstreken: wacht op AIS-vertrek, klok staat stil
+        cdTimer.style.display = 'none';
+        cdNum.textContent   = '\u2693';
+        cdNum.style.color   = 'var(--orange)';
+        cdLabel.textContent = 'Wacht op vertrek';
+        cdSub.textContent   = 'De klok start zodra de BELUGA Enkhuizen verlaat';
+        cdBlock.style.borderColor = 'rgba(245,147,10,.2)';
+      }
+    } else if (now < CFG.arrivalDate) {
+      // Dagen onderweg vanaf werkelijk vertrek
+      var dep2     = getDeparture();
+      var diff2    = now - dep2;
+      var daysTot  = Math.floor(diff2 / 86400000);
+      cdTimer.style.display = 'flex';
+      cdNum.textContent   = daysTot;
+      cdLabel.textContent = 'dagen op zee';
+      cdSub.textContent   = pad(Math.floor((diff2 % 86400000) / 3600000)) + ':' + pad(Math.floor((diff2 % 3600000) / 60000)) + ':' + pad(Math.floor((diff2 % 60000) / 1000)) + ' vandaag onderweg';
+      cdNum.style.color   = 'var(--green)';
+      cdBlock.style.borderColor = 'rgba(61,220,106,.3)';
+      document.getElementById('cd-days').textContent  = daysTot;
+      document.getElementById('cd-hours').textContent = pad(Math.floor((diff2 % 86400000) / 3600000));
+      document.getElementById('cd-mins').textContent  = pad(Math.floor((diff2 % 3600000) / 60000));
+      document.getElementById('cd-secs').textContent  = pad(Math.floor((diff2 % 60000) / 1000));
+      document.querySelector('.cd-unit:first-child .cd-unit-lbl').textContent = 'Dagen';
+    } else {
+      cdTimer.style.display = 'none';
+      cdNum.textContent   = '!';
+      cdLabel.textContent = 'Terug thuis!';
+      cdNum.style.color   = 'var(--green)';
+    }
+  }
+
+  tick();
+  if (countdownInterval) clearInterval(countdownInterval);
+  countdownInterval = setInterval(tick, 1000);
+}
+
+function renderWaypoints() {
+  var prog = getTripProgress();
+  var nmSailed = prog.nmSailed;
+
+  var html = '<div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--green);margin:0 0 6px;padding-left:21px">Heenreis &#x2192;</div>';
+  for (var i = 0; i < ROUTE.length; i++) {
+    var wp = ROUTE[i];
+    if (i > 0 && wp.ret && !ROUTE[i-1].ret) {
+      html += '<div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--orange);margin:12px 0 6px;padding-left:21px">&#x2190; Terugreis</div>';
+    }
+    var prevNm = i > 0 ? ROUTE[i-1].nm : 0;
+    var cls = '';
+    if (i === 0 && nmSailed > 0) { cls = 'done'; }
+    else if (nmSailed > wp.nm)   { cls = 'done'; }
+    else if (nmSailed >= prevNm && nmSailed < wp.nm) { cls = 'current'; }
+    html += '<div class="waypoint-row ' + cls + '">'
+      + '<div class="wp-dot"></div>'
+      + '<span class="wp-name">' + wp.name + '</span>'
+      + '<span class="wp-nm">' + wp.nm + ' nm</span>'
+      + '</div>';
+  }
+  document.getElementById('waypoints-list').innerHTML = html;
+}
+
+/* ── DBR ─────────────────────────────────────────── */
+function renderRing(pct, color, size, sw, label) {
+  var r = (size - sw) / 2;
+  var circ = 2 * Math.PI * r;
+  var dash = Math.min(pct, 100) / 100 * circ;
+  var c = size / 2;
+  return '<div class="ring-wrap">'
+    + '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">'
+    + '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="' + color + '33" stroke-width="' + sw + '"/>'
+    + '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '" stroke-linecap="round"'
+    + ' stroke-dasharray="' + dash.toFixed(1) + ' ' + circ.toFixed(1) + '" transform="rotate(-90 ' + c + ' ' + c + ')"/>'
+    + '<text x="' + c + '" y="' + (c + 5) + '" text-anchor="middle" font-size="15" font-weight="800" fill="#1c1c1e">' + Math.round(pct) + '%</text>'
+    + '</svg>'
+    + '<div class="ring-lbl-txt">' + label + '</div>'
+    + '</div>';
+}
+
+function renderDBR() {
+  var prog = getTripProgress();
+  var now  = new Date();
+  var dep  = getDeparture();
+  var totalTripDays = (CFG.arrivalDate - dep) / 86400000;
+  var daysSinceDep  = Math.max(0, (now - dep) / 86400000);
+  var nmSailed = prog.nmSailed;
+
+  // Bereken zeildagen vs rustdagen
+  var outNm = CFG.totalNm / 2;
+  var sailDaysEach  = outNm / CFG.avgNmPerDay;
+  var icelandDays   = Math.max(0, totalTripDays - 2 * sailDaysEach);
+  var activeSailDays = 0, restDays = 0;
+
+  if (prog.phase === 'out') {
+    activeSailDays = daysSinceDep;
+  } else if (prog.phase === 'iceland') {
+    activeSailDays = sailDaysEach;
+    restDays = daysSinceDep - sailDaysEach;
+  } else if (prog.phase === 'ret') {
+    var retStart = new Date(dep.getTime() + (sailDaysEach + icelandDays) * 86400000);
+    activeSailDays = sailDaysEach + (now - retStart) / 86400000;
+    restDays = icelandDays;
+  } else if (prog.phase === 'home') {
+    activeSailDays = sailDaysEach * 2;
+    restDays = icelandDays;
+  }
+
+  // Snelheid & productiviteit
+  var hoursAtSea = activeSailDays * 20;
+  var avgSpd = hoursAtSea > 0 ? (nmSailed / hoursAtSea).toFixed(1) : '--';
+  var nmPerDay = activeSailDays > 0 ? Math.round(nmSailed / activeSailDays) : '--';
+  var estMax = maxSpeedKn ? maxSpeedKn
+    : (nmSailed > 0 && avgSpd !== '--' ? (parseFloat(avgSpd) * 1.7).toFixed(1) : '--');
+
+  // Voortgang & schema
+  var voortPct = Math.min(100, Math.round((nmSailed / CFG.totalNm) * 100));
+  var planPct  = Math.min(100, Math.round((daysSinceDep / totalTripDays) * 100));
+  var lb = (planPct > 0 && prog.phase !== 'pre')
+    ? Math.min(100, Math.round((voortPct / planPct) * 100)) : 100;
+  var diffVsPlan = voortPct - planPct;
+
+  // FTR: hoeveel outbound waypoints zijn bereikt
+  var outWPs   = ROUTE.filter(function(w){ return !w.ret; });
+  var reached  = outWPs.filter(function(w){ return nmSailed >= w.nm; });
+  var ftrPct   = outWPs.length > 1 ? Math.round((reached.length / outWPs.length) * 100) : 100;
+
+  // LTI: scan blog posts op incident-keywords
+  var ltiCount = 0;
+  var incKw = ['gewond','letsel','pijn','gevallen','incident','medisch','dokter','arts','ehbo','ziekenhuis','breuk','fractuur'];
+  postsData.forEach(function(p){
+    var txt = ((p.title||'') + ' ' + (p.content||'')).toLowerCase();
+    if (incKw.some(function(kw){ return txt.indexOf(kw) >= 0; })) ltiCount++;
+  });
+  var veilPct = ltiCount === 0 ? 100 : Math.max(0, 100 - ltiCount * 25);
+
+  // Koersefficiëntie (groot-cirkel correctie; offshore = ~96-98%)
+  var koersEff = nmSailed > 0 ? 97 : 100;
+
+  // Dag-nummer
+  var dagNr = prog.phase === 'pre' ? 0 : Math.floor(daysSinceDep) + 1;
+
+  /* ── HTML opbouwen ── */
+  var H = '';
+
+  // Header
+  H += '<div style="padding:20px 0 10px">';
+  H += '<div style="font-size:26px;font-weight:800;color:#1c1c1e;letter-spacing:-.5px">Daily Business Review</div>';
+  H += '<div style="font-size:13px;color:#8e8e93;margin-top:3px">';
+  if (prog.phase === 'pre') H += 'Reis nog niet gestart &mdash; vertrekt 30 mei 09:00';
+  else if (prog.phase === 'home') H += 'Expeditie voltooid &middot; ' + Math.round(totalTripDays) + ' dagen totaal';
+  else H += 'Dag ' + dagNr + ' &middot; ' + now.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})
+    + ' &middot; ' + (prog.phase === 'iceland' ? 'IJsland' : prog.phase === 'ret' ? 'Terugreis' : 'Heenreis');
+  H += '</div></div>';
+
+  // Activity rings
+  H += '<div class="ah-card">';
+  H += '<div style="font-size:13px;font-weight:700;color:#1c1c1e;margin-bottom:10px">Expeditie overzicht</div>';
+  H += '<div class="rings-row">';
+  H += renderRing(voortPct, '#ff9500', 84, 11, 'Voortgang');
+  H += renderRing(ftrPct,   '#007aff', 84, 11, 'FTR');
+  H += renderRing(veilPct,  '#34c759', 84, 11, 'Veiligheid');
+  H += '</div></div>';
+
+  // Veiligheid
+  H += '<div class="ah-section-lbl">&#x1F6E1;&#xFE0F; Veiligheid</div>';
+  H += '<div class="ah-card">';
+  H += '<div class="ah-row"><span class="ah-row-lbl">LTI (Long Time Injury)</span><span class="lti-badge ' + (ltiCount === 0 ? 'lti-ok' : 'lti-warn') + '">' + ltiCount + '&nbsp;' + (ltiCount === 0 ? '&#x2713;' : '&#x26A0;') + '</span></div>';
+  H += '<div class="ah-row"><span class="ah-row-lbl">Gemelde incidenten</span><span class="ah-row-val">' + ltiCount + '</span></div>';
+  H += '<div class="ah-row"><span class="ah-row-lbl">Near Misses</span><span class="ah-row-val">0</span></div>';
+  H += '<div class="ah-row"><span class="ah-row-lbl">Veiligheidsindex</span><span class="ah-row-val" style="color:#34c759">' + veilPct + '%</span></div>';
+  H += '</div>';
+
+  // Productiviteit KPI tiles
+  H += '<div class="ah-section-lbl">&#x26A1; Productiviteit</div>';
+  H += '<div class="kpi-grid2">';
+
+  var planNmDiff = nmPerDay !== '--' ? nmPerDay - CFG.avgNmPerDay : null;
+
+  H += kpiTile('1F4CD', '#007aff', nmPerDay !== '--' ? nmPerDay : '--', 'nm', 'NM per zeegdag',
+    planNmDiff !== null ? '<span class="ah-trend ' + (planNmDiff >= 0 ? 't-up' : 't-dn') + '">'
+      + (planNmDiff >= 0 ? '&#x25B2;' : '&#x25BC;') + ' ' + Math.abs(Math.round(planNmDiff)) + ' vs plan</span>' : '');
+  H += kpiTile('23F1', '#007aff', avgSpd, 'kn', 'Gem. snelheid', '');
+  H += kpiTile('1F680', '#ff9500', estMax, 'kn', 'Max. snelheid', '');
+  H += kpiTile('1F551', '#ff9500', activeSailDays > 0 ? '20' : '--', 'uur/dag', 'Zeiluren / dag', '');
+  H += '</div>';
+
+  // Voortgang plan
+  H += '<div class="ah-section-lbl">&#x1F4C8; Voortgang plan</div>';
+  H += '<div class="ah-card">';
+  H += '<div style="margin-bottom:14px">';
+  H += '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px"><span style="color:#1c1c1e">Actuele voortgang</span><span style="font-weight:700;color:#ff9500">' + voortPct + '%</span></div>';
+  H += '<div class="ah-prog-track"><div class="ah-prog-fill" style="width:' + voortPct + '%;background:#ff9500"></div></div>';
+  H += '<div style="display:flex;justify-content:space-between;font-size:10px;color:#8e8e93"><span>Enkhuizen</span><span>&#x1F1EE;&#x1F1F8; Reykjavik 50%</span><span>Thuis</span></div>';
+  H += '</div>';
+  H += '<div class="ah-row"><span class="ah-row-lbl">Planvoortgang (tijd)</span><span class="ah-row-val" style="color:#8e8e93">' + planPct + '%</span></div>';
+  H += '<div class="ah-row"><span class="ah-row-lbl">Verschil vs plan</span><span class="ah-row-val ' + (diffVsPlan >= 0 ? 't-up' : 't-dn') + '">' + (diffVsPlan >= 0 ? '+' : '') + diffVsPlan + '%</span></div>';
+  H += '<div class="ah-row"><span class="ah-row-lbl">Leveringsbetrouwbaarheid</span><span class="ah-row-val" style="color:' + (lb >= 90 ? '#34c759' : lb >= 75 ? '#ff9500' : '#ff3b30') + '">' + lb + '%</span></div>';
+  H += '<div class="ah-row"><span class="ah-row-lbl">Koerseffici&#xEB;ntie</span><span class="ah-row-val" style="color:#34c759">' + koersEff + '%</span></div>';
+  H += '</div>';
+
+  // Trip statistieken
+  H += '<div class="ah-section-lbl">&#x1F4C5; Trip statistieken</div>';
+  H += '<div class="ah-card">';
+  H += '<div class="ah-row"><span class="ah-row-lbl">Zeildagen</span><span class="ah-row-val">' + Math.round(activeSailDays) + '</span></div>';
+  H += '<div class="ah-row"><span class="ah-row-lbl">Rustdagen (IJsland e.a.)</span><span class="ah-row-val">' + Math.round(restDays) + '</span></div>';
+  H += '<div class="ah-row"><span class="ah-row-lbl">Totaal gevaren</span><span class="ah-row-val">' + Math.round(nmSailed) + ' nm</span></div>';
+  H += '<div class="ah-row"><span class="ah-row-lbl">FTR havens / waypoints</span><span class="ah-row-val" style="color:#007aff">' + reached.length + ' / ' + outWPs.length + '</span></div>';
+  H += '<div class="ah-row"><span class="ah-row-lbl">Resterende afstand</span><span class="ah-row-val">' + Math.round(Math.max(0, CFG.totalNm - nmSailed)) + ' nm</span></div>';
+  H += '</div>';
+
+  // Overall performance score — alleen actief vanaf vertrek
+  H += '<div class="ah-section-lbl">&#x1F3C6; Overall performance score</div>';
+  H += '<div class="ah-card" style="text-align:center;padding:24px 16px">';
+  if (prog.phase === 'pre') {
+    H += '<div style="font-size:40px;font-weight:900;color:#c7c7cc;line-height:1">--</div>';
+    H += '<div style="font-size:13px;color:#8e8e93;margin-top:6px">Start: 30 mei 09:00</div>';
+    H += '<div style="font-size:10px;color:#c7c7cc;margin-top:8px">Score wordt gemeten vanaf vertrek</div>';
+  } else {
+    var score = Math.round(voortPct * .35 + ftrPct * .30 + veilPct * .20 + Math.min(100, lb) * .15);
+    var scoreCol = score >= 80 ? '#34c759' : score >= 60 ? '#ff9500' : '#ff3b30';
+    H += '<div style="font-size:64px;font-weight:900;color:' + scoreCol + ';line-height:1">' + score + '</div>';
+    H += '<div style="font-size:13px;color:#8e8e93;margin-top:6px">Expeditie Performance Score</div>';
+    H += '<div class="ah-prog-track" style="margin:14px 0 4px"><div class="ah-prog-fill" style="width:' + score + '%;background:' + scoreCol + '"></div></div>';
+    H += '<div style="font-size:10px;color:#c7c7cc">Voortgang 35% &middot; FTR 30% &middot; Veiligheid 20% &middot; Schema 15%</div>';
+  }
+  H += '</div>';
+
+  H += '<div style="text-align:center;font-size:11px;color:#c7c7cc;padding:8px 0 4px">Bijgewerkt: ' + now.toLocaleDateString('nl-NL',{day:'numeric',month:'short'}) + ' ' + now.toLocaleTimeString('nl-NL') + '</div>';
+
+  document.getElementById('dbr-body').innerHTML = H;
+}
+
+function kpiTile(icon, color, val, unit, lbl, extra) {
+  return '<div class="kpi-tile">'
+    + '<div class="kpi-ico">&#x' + icon + ';</div>'
+    + '<div class="kpi-num" style="color:' + color + '">' + val + '<span class="kpi-u"> ' + unit + '</span></div>'
+    + '<div class="kpi-lbl2">' + lbl + '</div>'
+    + (extra ? extra : '')
+    + '</div>';
+}
+
+/* ── ESTIMATED POSITION ─────────────────────────── */
+function calcEstimatedPosition() {
+  var prog = getTripProgress();
+  if (prog.phase === 'pre') return null;
+  if (prog.phase === 'home') return { lat: CFG.homePort.lat, lng: CFG.homePort.lng };
+  var nmSailed = prog.nmSailed;
+  for (var i = 1; i < ROUTE.length; i++) {
+    if (nmSailed <= ROUTE[i].nm) {
+      var t = (nmSailed - ROUTE[i-1].nm) / (ROUTE[i].nm - ROUTE[i-1].nm);
+      return {
+        lat: ROUTE[i-1].lat + t * (ROUTE[i].lat - ROUTE[i-1].lat),
+        lng: ROUTE[i-1].lng + t * (ROUTE[i].lng - ROUTE[i-1].lng)
+      };
+    }
+  }
+  return { lat: CFG.homePort.lat, lng: CFG.homePort.lng };
+}
+
+/* ── AISSTREAM LIVE (realtime AIS via WebSocket) ─── */
+var AIS_KEY = '11f83fd4c5c57a16406301a5c96d26dab2c01dfa';
+var liveFix = null;                 // { lat, lng, sog, cog, ts }
+var aisWs = null, aisRetry = 0, aisState = 'connecting';
+var LIVE_MAX_AGE_MS = 60 * 60 * 1000;   // 60 min: daarna val terug op schatting
+var PLANNED_DEP = CFG.departureDate;    // geplande vertrekdatum (fallback)
+
+// Werkelijke vertrekdatum: gedetecteerd via AIS, bewaard in localStorage
+var actualDeparture = null;
+try { var _ad = window.localStorage && localStorage.getItem('beluga_departure'); if (_ad) actualDeparture = new Date(_ad); } catch(e) {}
+
+function getDeparture() { return actualDeparture || PLANNED_DEP; }
+function hasDeparted() { return actualDeparture != null; }
+
+function haversineNm(la1, lo1, la2, lo2) {
+  var R = 3440.065, p = Math.PI / 180;
+  var dla = (la2 - la1) * p, dlo = (lo2 - lo1) * p;
+  var a = Math.sin(dla/2)*Math.sin(dla/2) + Math.cos(la1*p)*Math.cos(la2*p)*Math.sin(dlo/2)*Math.sin(dlo/2);
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+// Markeer vertrek zodra de boot >3 nm uit Enkhuizen is en daadwerkelijk vaart
+function maybeDetectDeparture() {
+  if (actualDeparture || !liveFix) return;
+  if (liveFix.ts < PLANNED_DEP.getTime() - 24 * 3600000) return;   // niet >24u voor planning
+  var dNm = haversineNm(liveFix.lat, liveFix.lng, CFG.homePort.lat, CFG.homePort.lng);
+  var moving = liveFix.sog != null && liveFix.sog > 2;
+  if (dNm > 3 && moving) {
+    actualDeparture = new Date(liveFix.ts);
+    try { localStorage.setItem('beluga_departure', actualDeparture.toISOString()); } catch(e) {}
+    var hs = document.getElementById('header-status'); if (hs) hs.textContent = 'LIVE AIS';
+    renderCountdown(); updateStatsDisplay();
+    if (activePage === 'logboek') renderWaypoints();
+    if (activePage === 'dbr') renderDBR();
+  }
+}
+
+function isLiveFresh() {
+  return !!(liveFix && (Date.now() - liveFix.ts) < LIVE_MAX_AGE_MS);
+}
+
+function updateLiveStatus() {
+  var hs = document.getElementById('header-status');
+  if (hs) hs.textContent = isLiveFresh() ? 'LIVE AIS' : (hasDeparted() ? 'ONDERWEG' : 'BINNENKORT');
+  updateAisStatusUI();
+}
+
+function updateAisStatusUI() {
+  var dot = document.getElementById('ais-dot');
+  var txt = document.getElementById('ais-status-text');
+  if (!dot || !txt) return;
+  if (isLiveFresh()) {
+    var mins = Math.round((Date.now() - liveFix.ts) / 60000);
+    dot.style.background = 'var(--green)'; dot.style.boxShadow = '0 0 6px var(--green)';
+    txt.style.color = 'var(--green)';
+    txt.textContent = 'Live AIS · positie ' + (mins <= 0 ? 'zojuist' : (mins + ' min geleden'));
+  } else if (aisState === 'open') {
+    dot.style.background = 'var(--orange)'; dot.style.boxShadow = 'none';
+    txt.style.color = 'var(--muted)';
+    txt.textContent = liveFix ? 'Geen recente AIS — geschatte positie' : 'Verbonden — wacht op eerste AIS-positie…';
+  } else if (aisState === 'closed') {
+    dot.style.background = 'var(--dim)'; dot.style.boxShadow = 'none';
+    txt.style.color = 'var(--muted)';
+    txt.textContent = 'AIS-verbinding verbroken — opnieuw verbinden…';
+  } else {
+    dot.style.background = 'var(--dim)'; dot.style.boxShadow = 'none';
+    txt.style.color = 'var(--muted)';
+    txt.textContent = 'AIS verbinden…';
+  }
+}
+
+// Projecteer een positie op (een deel van) de route -> cumulatieve nm
+function projectPointNm(lat, lng, fromIdx, toIdx) {
+  var best = { nm: null, dist: Infinity };
+  var kx = Math.cos(lat * Math.PI / 180);
+  for (var i = fromIdx + 1; i <= toIdx; i++) {
+    var a = ROUTE[i-1], b = ROUTE[i];
+    var ax = a.lng * kx, ay = a.lat, bx = b.lng * kx, by = b.lat, px = lng * kx, py = lat;
+    var dx = bx - ax, dy = by - ay, len2 = dx*dx + dy*dy;
+    var t = len2 ? ((px-ax)*dx + (py-ay)*dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    var cxp = ax + t*dx, cyp = ay + t*dy;
+    var distNm = Math.sqrt((px-cxp)*(px-cxp) + (py-cyp)*(py-cyp)) * 60;
+    if (distNm < best.dist) { best.dist = distNm; best.nm = a.nm + t * (b.nm - a.nm); }
+  }
+  return best;
+}
+
+// Live nm gevaren (of null bij geen verse fix); heen/terug bepaald via tijdvenster
+function liveNmSailed() {
+  if (!isLiveFresh()) return null;
+  var now = new Date();
+  var outNm = CFG.totalNm / 2;
+  var sailDays = outNm / CFG.avgNmPerDay;
+  var totalDays = (CFG.arrivalDate - getDeparture()) / 86400000;
+  var icelandDays = Math.max(0, totalDays - 2 * sailDays);
+  var outboundEnd = new Date(getDeparture().getTime() + sailDays * 86400000);
+  var returnStart = new Date(outboundEnd.getTime() + icelandDays * 86400000);
+  var part = (now < returnStart)
+    ? projectPointNm(liveFix.lat, liveFix.lng, 0, 7)
+    : projectPointNm(liveFix.lat, liveFix.lng, 7, ROUTE.length - 1);
+  return part.nm;
+}
+
+function connectAisStream() {
+  if (!('WebSocket' in window)) return;
+  aisState = 'connecting'; updateAisStatusUI();
+  try { aisWs = new WebSocket('wss://stream.aisstream.io/v0/stream'); }
+  catch(e) { scheduleAisReconnect(); return; }
+
+  aisWs.onopen = function() {
+    aisRetry = 0;
+    aisWs.send(JSON.stringify({
+      APIKey: AIS_KEY,
+      BoundingBoxes: [[[-90, -180], [90, 180]]],
+      FiltersShipMMSI: [String(CFG.mmsi)],
+      FilterMessageTypes: ['PositionReport']
+    }));
+    aisState = 'open'; updateAisStatusUI();
+  };
+
+  aisWs.onmessage = function(ev) {
+    var data;
+    try { data = JSON.parse(typeof ev.data === 'string' ? ev.data : ''); } catch(e) { return; }
+    if (!data || data.MessageType !== 'PositionReport') return;
+    var pr = (data.Message && data.Message.PositionReport) || {};
+    var md = data.MetaData || {};
+    var lat = (pr.Latitude  != null) ? pr.Latitude  : md.latitude;
+    var lng = (pr.Longitude != null) ? pr.Longitude : md.longitude;
+    if (lat == null || lng == null) return;
+    var sog = (pr.Sog != null && pr.Sog < 102.3) ? pr.Sog : null;       // 102.3 = niet beschikbaar
+    var cog = (pr.Cog != null && pr.Cog < 360)   ? pr.Cog : null;       // 360   = niet beschikbaar
+    liveFix = { lat: lat, lng: lng, sog: sog, cog: cog, ts: Date.now() };
+    maybeDetectDeparture();
+    shipPos.lat = lat; shipPos.lng = lng;
+    shipPos.speed = sog != null ? sog.toFixed(1) : null;
+    shipPos.cog   = cog != null ? Math.round(cog) : null;
+    if (sog != null && (!maxSpeedKn || sog > parseFloat(maxSpeedKn))) maxSpeedKn = sog.toFixed(1);
+    var hs = document.getElementById('header-status');
+    if (hs) hs.textContent = 'LIVE AIS';
+    updateShipMarker();
+    updateAisStatusUI();
+    if (activePage === 'logboek') renderWaypoints();
+    if (activePage === 'dbr') renderDBR();
+  };
+
+  aisWs.onclose = function() { aisState = 'closed'; updateAisStatusUI(); scheduleAisReconnect(); };
+  aisWs.onerror = function() { try { aisWs.close(); } catch(e) {} };
+}
+
+function scheduleAisReconnect() {
+  aisRetry = Math.min(aisRetry + 1, 6);
+  setTimeout(connectAisStream, 1000 * Math.pow(2, aisRetry));   // 2s..64s backoff
+}
+
+/* ── LIVE AIS POSITIE ───────────────────────────── */
+function fetchAisPosition() {
+  // Probeer VesselFinder publieke endpoint via CORS-proxy
+  var sources = [
+    'https://corsproxy.io/?' + encodeURIComponent('https://www.myshiptracking.com/api/?type=json&mmsi=' + CFG.mmsi),
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://www.vesseltracker.com/app/VesselTrackerApi.html?mmsi=' + CFG.mmsi + '&type=json&userkey=demo'),
+  ];
+
+  function trySource(index) {
+    if (index >= sources.length) return; // Geen AIS data, gebruik geschatte positie
+    fetch(sources[index])
+      .then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function(text){
+        try {
+          var data = JSON.parse(text);
+          // VesselTracker formaat
+          var lat = data.lat || (data.vessel && data.vessel.lat) || (data[0] && data[0].lat);
+          var lng = data.lon || data.lng || (data.vessel && (data.vessel.lon || data.vessel.lng)) || (data[0] && (data[0].lon || data[0].lng));
+          var spd = data.sog || data.speed || (data.vessel && data.vessel.sog) || (data[0] && data[0].sog);
+          var cog = data.cog || (data.vessel && data.vessel.cog) || (data[0] && data[0].cog);
+          if (lat && lng) {
+            shipPos.lat    = parseFloat(lat);
+            shipPos.lng    = parseFloat(lng);
+            shipPos.speed  = spd ? parseFloat(spd).toFixed(1) : null;
+            shipPos.cog    = cog ? Math.round(parseFloat(cog)) : null;
+            shipPos.source = 'AIS live';
+            if (spd && (!maxSpeedKn || parseFloat(spd) > parseFloat(maxSpeedKn))) maxSpeedKn = parseFloat(spd).toFixed(1);
+            document.getElementById('header-status').textContent = 'LIVE AIS';
+            updateShipMarker();
+          }
+        } catch(e) { trySource(index + 1); }
+      })
+      .catch(function(){ trySource(index + 1); });
+  }
+  trySource(0);
+}
+
+/* ── POSITIE REFRESH (elke 5 min) ───────────────── */
+function refreshPosition() {
+  if (isLiveFresh()) { updateShipMarker(); return; }
+  var est = calcEstimatedPosition();
+  if (est) {
+    shipPos.lat = est.lat;
+    shipPos.lng = est.lng;
+    var hs = document.getElementById('header-status');
+    if (hs) hs.textContent = hasDeparted() ? 'ONDERWEG' : 'BINNENKORT';
+    updateShipMarker();
+  }
+}
+
+/* ── HARD REFRESH (cache leegmaken) ────────────────── */
+function hardRefresh() {
+  var p = ('caches' in window)
+    ? caches.keys().then(function(keys){ return Promise.all(keys.map(function(k){ return caches.delete(k); })); })
+    : Promise.resolve();
+  p.then(function(){
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs){
+        Promise.all(regs.map(function(r){ return r.unregister(); })).then(function(){ location.reload(true); });
+      });
+    } else { location.reload(true); }
+  });
+}
+
+/* ── INIT ────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('[BELUGA] DOMContentLoaded, Leaflet:', typeof L);
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      showPage(this.dataset.page, this);
+    });
+  });
+
+  var est = calcEstimatedPosition();
+  if (est) {
+    shipPos.lat = est.lat;
+    shipPos.lng = est.lng;
+    document.getElementById('header-status').textContent = 'ONDERWEG';
+  } else {
+    document.getElementById('header-status').textContent = 'BINNENKORT';
+  }
+
+  initMap();
+  loadBlog();
+  loadWeer();
+
+  connectAisStream();
+  setInterval(refreshPosition, 5 * 60 * 1000);
+  setInterval(updateLiveStatus, 30 * 1000);
+
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden && activePage === 'dbr') { renderDBR(); }
+  });
+
+  // Geen service worker meer — app laadt altijd vers van het netwerk
+  console.log('[BELUGA] build 2026-05-29 fix-truncation');
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "BELUGA — IJsland Expeditie 2026",
+  "short_name": "BELUGA",
+  "description": "Live tracker voor de zeilreis van BELUGA naar IJsland",
+  "start_url": "/beluga-tracker/",
+  "display": "standalone",
+  "background_color": "#070f08",
+  "theme_color": "#0d1f12",
+  "orientation": "portrait-primary",
+  "categories": ["navigation", "travel"],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  
